@@ -1,0 +1,479 @@
+---
+title: "Analysis Part 1: "
+subtitle: "Descriptive Results of Similarity Ratings"
+date: "`r Sys.Date()`"
+author: "David Izydorczyk"
+format: 
+  html:
+    code-fold: true
+    code-copy: true
+    code-tools: true
+    df-print: kable
+    toc: true
+    toc-location: right
+    fig-height: 4
+    fig-width:  9
+    fig-cap-location: top
+    tab-cap-location: top
+    embed-resources: true
+    grid:
+      margin-width: 350px
+execute:
+  warning: false
+  messages: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup}
+#| code-summary: "Load packages & ggplot theme"
+#| cache: false
+
+# Packages
+library(tidyverse)
+library(psych)
+library(purrr)
+library(patchwork)
+library(knitr)
+library(kableExtra)
+library(stringr)
+library(tm)
+library(ggwordcloud)
+library(wordcloud)
+library(viridis)
+
+
+
+source("../Scripts/plot_settings.R")
+source("../Scripts/helper_functions.R")
+```
+
+```{r data}
+#| code-summary: "Load data"
+
+# Load data sets
+
+df_food    <- read_csv2("../Data/3 Food/data_analysis_similarity_food.csv") |>
+                  rename(img_stim_1 = stim_1, img_stim_2 = stim_2,stim_1=food_stim_1,stim_2=food_stim_2)
+
+df_country <- read_csv2("../Data/1 Countries/data_analysis_similarity_country.csv") |>
+                  rename(img_stim_1 = stim_1, img_stim_2 = stim_2,stim_1=country_stim_1,stim_2=country_stim_2) 
+
+df_mammal  <- read_csv2("../Data/2 Mammals/data_analysis_similarity_mammals.csv") |> 
+                  rename(img_stim_1 = stim_1, img_stim_2 = stim_2,stim_1=mammal_stim_1,stim_2=mammal_stim_2) 
+
+
+# Load stimulus List
+
+stims_food    <- read_csv2("../Materials/stimlist_foods.csv")
+stims_country <- read_csv2("../Materials/stimlist_countries.csv") |> rename(category = continent)
+stims_mammal  <- read_csv2("../Materials/stimlist_mammals.csv") 
+
+
+# Add category/continent/family infos to dfs
+
+df_food    <- left_join(df_food,stims_food[,c("ID","category")], by =  join_by(ID_stim_1  == ID)) |> 
+                left_join(stims_food[,c("ID","category")], by =  join_by(ID_stim_2  == ID),suffix = c("_1", "_2"))
+
+df_country <- left_join(df_country, stims_country[,c("ID","category")], by =  join_by(ID_stim_1  == ID)) |> 
+                left_join(stims_country[,c("ID","category")], by =  join_by(ID_stim_2  == ID),suffix = c("_1", "_2"))
+
+df_mammal <- left_join(df_mammal, stims_mammal[,c("ID","category")], by =  join_by(ID_stim_1  == ID)) |> 
+                left_join(stims_mammal[,c("ID","category")], by =  join_by(ID_stim_2  == ID),suffix = c("_1", "_2"))
+
+# Combine into tibble
+dfs <- tibble(names   = c("Food", "Countries", "Mammals"),
+              dataset = list(df_food,df_country,df_mammal))
+
+```
+
+
+# Descriptive Statistics                      
+
+```{r}
+#| code-summary: "Compute descriptive statistics of similarity ratings"
+
+
+# Compute average similarities for all pairs
+dfs <- dfs |> 
+          mutate(sim_mat = purrr::map(dataset, ~ .x |> 
+                            group_by(ID_stim_1, ID_stim_2, stim_1, stim_2, category_1, category_2) |> 
+                            summarise(norm_sim = mean(norm_sim), .groups = "drop") |> 
+                            select(ID_stim_1, ID_stim_2, norm_sim, stim_1, stim_2, category_1, category_2)))
+
+
+
+# Compute descriptives per domain
+sim_summary <- dfs  |> 
+                transmute(names, sim_stats = purrr::map(sim_mat, ~ .x |> pull(norm_sim) |> 
+                                                           describe() |> as_tibble()))  |> 
+                unnest(sim_stats)
+
+
+sim_summary |>
+  select(names, mean, sd, min, max) |>
+  kable(digits = 2)
+```
+
+# Pairwise Similarity Matrices    
+
+```{r}
+#| code-summary: "Make Figure 3 (Pairwise Similarities)"
+#| fig-height: 8
+#| fig-width:  20
+#| fig-align: "center"
+#| label: fig-sim
+#| fig-cap: "Average Pairwise similarites"
+#| column: page
+
+# Reorder stimuli based on categories
+order_food <- dfs$sim_mat[[1]] |> 
+                bind_rows(data.frame(ID_stim_1 = 1, 
+                                     ID_stim_2 = 80,
+                                     norm_sim  = 0.09444444,
+                                     stim_1    = "Traubenzucker",
+                                     stim_2    = "Traubenzucker",
+                                     category_1 = "Sweets and snacks", 
+                                     category_2 = "Sweets and snacks")) |> # To make Traubenzucker appear in the data
+                arrange(category_1,category_2,stim_1,stim_2) |> 
+                transmute(plot_ID   = as.integer(factor(stim_1, levels = unique(stim_1))),
+                          plot_stim = stim_1) |> 
+                distinct()
+
+# Category order:
+
+# [1] "Cereal products and potatoes" "Dairy products and eggs"     
+# [3] "Fruits"                       "Legumes"                     
+# [5] "Meat (substitutes) and fish"  "Nuts"                        
+# [7] "Spreads"                      "Sweets and snacks"           
+# [9] "Vegetables"
+
+temp_food <- dfs$sim_mat[[1]] |> 
+                left_join(order_food, by =  join_by(stim_1  == plot_stim), relationship = "many-to-many") |> 
+                left_join(order_food, by =  join_by(stim_2  == plot_stim), relationship = "many-to-many",suffix = c("_1", "_2"))
+   
+
+temp_food |> 
+  mutate(plot_ID_min = pmin(plot_ID_1, plot_ID_2),
+         plot_ID_max = pmax(plot_ID_1, plot_ID_2)) |> 
+  arrange(plot_ID_min, plot_ID_max) |> 
+  ggplot(aes(x = plot_ID_max, y = plot_ID_min, fill = norm_sim)) +
+      geom_tile() +
+      labs(x = expression("Stim " * italic(i)),
+           y = expression("Stim " * italic(j)),
+           fill = "Normalized Mean Similarities", title = "Foods") +
+      scale_x_continuous(expand = c(0.01, 0),breaks = c(1,seq(from = 0, to = 80, by = 5))) + 
+      scale_y_continuous(expand = c(0.01, 0),breaks = c(1,seq(from = 0, to = 80, by = 5)),limits = c(0,100)) + 
+      scale_fill_viridis_b() +
+      theme_nice() +
+      theme(legend.position = "right") + 
+      ggplot2::annotate("text", x = 5, y = 20, label = "Cereal products \n & potatoes", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.8) +
+      ggplot2::annotate("text", x = 17, y = 30, label = "Dairy products \n & eggs", 
+                        size = 5, vjust = 0.5 , angle = 90, lineheight = 0.8) +
+      ggplot2::annotate("text", x = 29, y = 35, label = "Fruits", 
+                        size = 5, vjust = 0.5 , angle = 90, lineheight = 0.8) +
+      ggplot2::annotate("text", x = 37, y = 47, label = "Legumes", 
+                        size = 5, vjust = 0.5 , angle = 90, lineheight = 0.8) +
+      ggplot2::annotate("text", x = 45, y = 59, label = "Meat (substitutes) \n & fish", 
+                        size = 5, vjust = 0.5 , angle = 90, lineheight = 0.8) +
+      ggplot2::annotate("text", x = 51, y = 59, label = "Nuts", 
+                        size = 5, vjust = 0.5 , angle = 90, lineheight = 0.8) +
+      ggplot2::annotate("text", x = 55, y = 64, label = "Spreads", 
+                        size = 5, vjust = 0.5 , angle = 90, lineheight = 0.8) +
+      ggplot2::annotate("text", x = 61, y = 70, label = "Sweets & \n snacks", 
+                        size = 5, vjust = 0.5 , angle = 90, lineheight = 0.8) +
+      ggplot2::annotate("text", x = 75, y = 85, label = "Vegetables", 
+                        size = 5, vjust = 0.5 , angle = 90, lineheight = 0.8) +
+      theme(axis.ticks.x = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.text.x = element_blank(),
+            axis.text.y = element_blank(),
+            panel.grid.major = element_blank()) -> sim_mat_plot_food
+
+
+# Reorder stimuli based on categories
+order_countries <- dfs$sim_mat[[2]] |> 
+                bind_rows(data.frame(ID_stim_1 = 1, 
+                                     ID_stim_2 = 80,
+                                     norm_sim  = 99999,
+                                     stim_1    = "Vatican City",
+                                     stim_2    = "Vatican City",
+                                     category_1 = "europe", 
+                                     category_2 = "europe")) |> # To make Traubenzucker appear in the data
+                arrange(category_1,category_2,stim_1,stim_2) |> 
+                transmute(plot_ID   = as.integer(factor(stim_1, levels = unique(stim_1))),
+                          plot_stim = stim_1) |> 
+                distinct()
+
+# Category order: 
+# order_countries$category_1 |> unique()
+# [1] "africa"        "asia"          "europe"        "north_america"
+# [5] "oceania"       "south_america"
+
+temp_countries <- dfs$sim_mat[[2]] |> 
+                     left_join(order_countries, by =  join_by(stim_1  == plot_stim), relationship = "many-to-many") |> 
+                     left_join(order_countries, by =  join_by(stim_2  == plot_stim), relationship = "many-to-many",
+                               suffix = c("_1", "_2"))
+   
+
+temp_countries |> 
+  mutate(plot_ID_min = pmin(plot_ID_1, plot_ID_2),
+         plot_ID_max = pmax(plot_ID_1, plot_ID_2)) |> 
+  arrange(plot_ID_min, plot_ID_max) |> 
+  ggplot(aes(x = plot_ID_max, y = plot_ID_min, fill = norm_sim)) +
+      geom_tile() +
+      labs(x = expression("Stim " * italic(i)),
+           y = "",
+           fill = "Normalized Mean Similarities", title = "Countries") +
+      scale_x_continuous(expand = c(0.01, 0),breaks = c(1,seq(from = 0, to = 80, by = 5))) + 
+      scale_y_continuous(expand = c(0.01, 0),breaks = c(1,seq(from = 0, to = 80, by = 5)),limits = c(0,100)) + 
+      scale_fill_viridis_b() +
+      theme_nice() +
+      theme(legend.position = "right") + 
+      ggplot2::annotate("text", x = 7, y = 15, label = "Africa", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.8) +
+      ggplot2::annotate("text", x = 22, y = 30, label = "Asia", 
+                        size = 5, vjust = 0.5 , angle = 90, lineheight = 0.8) +
+      ggplot2::annotate("text", x = 36, y = 45, label = "Europe", 
+                        size = 5, vjust = 0.5 , angle = 90, lineheight = 0.8) +
+      ggplot2::annotate("text", x = 48, y = 60, label = "North & Central \n America", 
+                        size = 5, vjust = 0.5 , angle = 90, lineheight = 0.8) + 
+      ggplot2::annotate("text", x = 60, y = 70, label = "Oceania", 
+                        size = 5, vjust = 0.5 , angle = 90, lineheight = 0.8) + 
+      ggplot2::annotate("text", x = 74, y = 87, label = "South America", 
+                        size = 5, vjust = 0.5 , angle = 90, lineheight = 0.8) + 
+      theme(axis.ticks.x = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.text.x = element_blank(),
+            axis.text.y = element_blank(),
+            panel.grid.major = element_blank())   -> sim_mat_plot_countries
+
+
+
+# Reorder stimuli based on categories
+order_mammals <- dfs$sim_mat[[3]] |> 
+                bind_rows(data.frame(ID_stim_1 = 1, 
+                                     ID_stim_2 = 80,
+                                     norm_sim  = 99999,
+                                     stim_1    = "Asiatischer Elefant",
+                                     stim_2    = "Asiatischer Elefant",
+                                     category_1 = "Proboscidea", 
+                                     category_2 = "Proboscidea")) |>
+                arrange(category_1,category_2,stim_1,stim_2) |> 
+                transmute(plot_ID   = as.integer(factor(stim_1, levels = unique(stim_1))),
+                          plot_stim = stim_1, category_1) |> 
+                distinct()
+
+# Category order: 
+# order_mammals$category_1 |> unique()
+#  [1] "Artiodactyla"   "Carnivora"      "Cetacea"        "Dasyuromorphia" "Diprotodontia" 
+#  [6] "Lagomorpha"     "Mammalia"       "Monotremata"    "Perissodactyla" "Pilosa"        
+# [11] "Primates"       "Proboscidea"    "Rodentia"       "Sirenia"     
+
+temp_mammals <- dfs$sim_mat[[3]] |> 
+                     left_join(order_mammals, by =  join_by(stim_1  == plot_stim), relationship = "many-to-many") |> 
+                     left_join(order_mammals, by =  join_by(stim_2  == plot_stim), relationship = "many-to-many",
+                               suffix = c("_1", "_2"))
+   
+
+temp_mammals |> 
+  mutate(plot_ID_min = pmin(plot_ID_1, plot_ID_2),
+         plot_ID_max = pmax(plot_ID_1, plot_ID_2)) |> 
+  arrange(plot_ID_min, plot_ID_max) |> 
+  ggplot(aes(x = plot_ID_max, y = plot_ID_min, fill = norm_sim)) +
+      geom_tile() +
+      labs(x = expression("Stim " * italic(i)),
+           y = "",
+           fill = "Normalized Mean Similarities", title = "Mammals") +
+      scale_x_continuous(expand = c(0.01, 0),breaks = c(1,seq(from = 0, to = 80, by = 5))) + 
+      scale_y_continuous(expand = c(0.01, 0),breaks = c(1,seq(from = 0, to = 80, by = 5)),limits = c(0,100)) + 
+      scale_fill_viridis_b() +
+      theme_nice() +
+      theme(legend.position = "right") + 
+      ggplot2::annotate("text", x = 7, y = 19, label = "Artiodactyla", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.9) +
+      ggplot2::annotate("text", x = 24, y = 35, label = "Carnivora", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.9) +
+      ggplot2::annotate("text", x = 34.5, y = 43, label = "Cetacea", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.9) +
+      ggplot2::annotate("text", x = 37, y = 52, label = "Dasyuromorphia", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.9) + 
+      ggplot2::annotate("text", x = 40.5, y = 57, label = "Diprotodontia", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.9) + 
+      ggplot2::annotate("text", x = 43, y = 60, label = "Lagomorpha", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.9) + 
+      ggplot2::annotate("text", x = 45, y = 62, label = "Mammalia", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.9) + 
+      ggplot2::annotate("text", x = 47, y = 64, label = "Monotremata", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.9) + 
+      ggplot2::annotate("text", x = 49.5, y = 68, label = "Perissodactyla", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.9) + 
+      ggplot2::annotate("text", x = 52, y = 69, label = "Pilosa", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.9) + 
+      ggplot2::annotate("text", x = 61, y = 75, label = "Primates", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.9) + 
+      ggplot2::annotate("text", x = 70.5, y = 82, label = "Proboscidea", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.9) + 
+      ggplot2::annotate("text", x = 76, y = 85, label = "Rodentia", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.9) + 
+      ggplot2::annotate("text", x = 79, y = 87, label = "Sirenia", 
+                        size = 5, vjust = 0.5, angle = 90, lineheight = 0.9) + 
+      theme(axis.ticks.x = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.text.x = element_blank(),
+            axis.text.y = element_blank(),
+            panel.grid.major = element_blank())  -> sim_mat_plot_mammals
+
+
+
+sim_mat_plot_food + sim_mat_plot_countries + sim_mat_plot_mammals +
+  plot_layout(guides = "collect") &
+  theme(legend.position = 'bottom',
+        legend.key.width=unit(1,"cm")) & 
+  scale_fill_continuous(limits = c(0,1),type="viridis")&
+  guides(fill = guide_colorbar(title = "Mean Normalized Similarity    ",
+                               label.position = "bottom",
+                               title.position = "left", title.vjust = 1,
+                               # draw border around the legend
+                               frame.colour = "black",
+                               barwidth = 15,
+                               barheight = 1.5)) 
+
+
+ggsave("../Figures/pairwise_similarities.pdf", width = 50 , height = 20 , unit = "cm",
+       bg="white",dpi=300,device = cairo_pdf)
+
+```
+
+# Table with 5 most similar and dissimilar countries     
+
+@tbl-sim shows the on average 10 most similar and 10 most dissimilar countries.
+ 
+```{r}
+#| code-summary: "Make tables"
+#| label: tbl-sim
+#| tbl-cap: "5 most similar and dissimilar countries (on average)"
+#| tbl-subcap: 
+#| - "Food"
+#| - "Countries"
+#| - "Mammals"
+#| layout-ncol: 3
+#| column: page
+
+
+create_latex_table <- function(df, dataset_name) {
+  
+  df |> 
+    select(stim_1,stim_2,norm_sim) |> 
+    arrange(norm_sim) |> 
+    mutate(norm_sim = round(norm_sim, 2)) |> 
+    slice(c(1:5, (n() - 4):n())) |> 
+    mutate(across(everything(), as.character)) %>%  # ensure all are character
+    kbl(col.names = c("Stimulus i", "Stimulus j", "M"),align = "c") |> 
+    kable_paper(c("hover")) 
+  
+}
+
+
+
+# Apply to all datasets in dfs
+dfs <- dfs |> mutate(tbl = map2(sim_mat, names, create_latex_table))
+
+dfs$tbl[[1]] 
+dfs$tbl[[2]]
+dfs$tbl[[3]]
+```
+
+
+# Descriptive: Features                          
+
+@fig-wc gives an overview of the features people used to make their similarity judgments. Raw responses where preprocessed (lower case, remove punctuation and white space), lemmatized (i.e., "culture"/"cultural" -> "culture"). Only feature which were reported at least 3 times are plotted.
+
+
+```{r}
+#| code-summary: "Plot Wordcloud"
+#| fig-height: 6
+#| fig-width:  14
+#| fig-align: "center"
+#| label: fig-wc
+#| fig-cap: "Wordcloud of reported features"
+#| column: page
+
+
+preprocessing <- function(df){
+  
+  features <- df %>% select(ID, features) %>% distinct()
+
+  # Clean and preprocess the text
+  clean_text <- features$features
+  
+  # Create a text corpus
+  corpus <- Corpus(VectorSource(clean_text))
+  
+  # Convert to lower case
+  corpus <- tm_map(corpus, content_transformer(tolower))
+  
+    # Remove extra whitespace
+  corpus <- tm_map(corpus, stripWhitespace)
+  
+  # Remove punctuation
+  corpus <- tm_map(corpus, removePunctuation)
+  
+  # Remove stopwords (common words that don’t add much meaning)
+  corpus <- tm_map(corpus, removeWords, stopwords("en"))
+  
+  # Remove other filler words
+  words2remove <- c("answer","etc","say","try","two","come","give","similar",
+                    "similarity","food","country","animal", "sometimes", "whether",
+                    "can","mostly","first","slightly","alike","give","even","start",
+                    "relate","similarity","seem","just","another","somewhat","theyre",
+                    "may","mostly","one","just","feature","didnt","way","guess")
+  
+  corpus  <- tm_map(corpus, removeWords, words2remove)
+  
+
+  # Optionally, remove numbers
+  corpus <- tm_map(corpus, removeNumbers)
+  
+  corpus <- tm_map(corpus, content_transformer(function(x) textstem::lemmatize_strings(x)))
+  
+  # Create a term-document matrix
+  tdm <- TermDocumentMatrix(corpus)
+  
+  return(tdm)
+  
+}
+
+plot_wc <- function(tdm, name){
+  
+  # Get word frequencies
+  word_freqs      <- sort(rowSums(as.matrix(tdm)), decreasing = TRUE)
+  word_freq_table <- data.frame(word = names(word_freqs), freq = word_freqs)
+  
+  # Generate the word cloud again
+  ggwordcloud(words    = word_freq_table$word,
+            freq     = word_freq_table$freq,
+            min.freq = 5, 
+            scale    = c(4,0.5), 
+            colors   = viridis(8,option = "D"),
+            family = "Jost") + 
+    labs(title = name) + 
+    theme(plot.title   = element_text(hjust = 0.5,size = 20, face = "bold"),
+          panel.border = element_rect(colour = "black", linewidth = 0.5, fill = NA))
+  
+}
+
+
+dfs %>%
+  mutate(tdm     = purrr::map(dataset, preprocessing),
+         wc_plot = map2(tdm,names,plot_wc)) |> 
+  pull(wc_plot) |> 
+  wrap_plots()
+  
+
+ggsave("../Figures/feature_wc.pdf", width = 40 , height = 15 , unit = "cm",
+       bg="white",dpi=300,device = cairo_pdf)
+
+```
+

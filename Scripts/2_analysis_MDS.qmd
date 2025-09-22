@@ -1,0 +1,387 @@
+---
+title: "Analysis Part 2:"
+subtitle: "Multidimensional Scaling"
+date: "`r Sys.Date()`"
+author: "David Izydorczyk"
+format: 
+  html:
+    code-fold: true
+    code-copy: true
+    code-tools: true
+    df-print: kable
+    toc: true
+    toc-location: right
+    fig-height: 4
+    fig-width:  9
+    fig-cap-location: top
+    tab-cap-location: top
+    embed-resources: true
+    grid:
+      margin-width: 350px
+execute:
+  warning: false
+  messages: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup}
+#| code-summary: "Load packages & ggplot theme"
+#| cache: false
+
+# Packages
+library(tidyverse)
+library(MDShelper)
+library(smacof)
+library(purrr)
+library(patchwork)
+library(knitr)
+library(kableExtra)
+library(correlation)
+library(papaja)
+library(ggrepel)
+library(ggimage)
+
+source("../Scripts/plot_settings.R")
+```
+
+```{r data}
+#| code-summary: "Load data"
+
+# Load data sets
+
+df_food    <- read_csv2("../Data/3 Food/data_analysis_similarity_food.csv") |>
+                  rename(img_stim_1 = stim_1, img_stim_2 = stim_2,stim_1=food_stim_1,stim_2=food_stim_2)
+
+df_country <- read_csv2("../Data/1 Countries/data_analysis_similarity_country.csv") |>
+                  rename(img_stim_1 = stim_1, img_stim_2 = stim_2,stim_1=country_stim_1,stim_2=country_stim_2) 
+
+df_mammal  <- read_csv2("../Data/2 Mammals/data_analysis_similarity_mammals.csv") |> 
+                  rename(img_stim_1 = stim_1, img_stim_2 = stim_2,stim_1=mammal_stim_1,stim_2=mammal_stim_2) 
+
+
+# Load item information (with image paths)
+stims_food    <- read_csv2("../Materials/stimlist_foods.csv")
+stims_country <- read_csv2("../Materials/stimlist_countries.csv") |> rename(category = continent)
+stims_mammal  <- read_csv2("../Materials/stimlist_mammals.csv") 
+
+# Combine into tibble
+dfs <- tibble(names   = c("Food", "Countries", "Mammals"),
+              dataset = list(df_food,df_country,df_mammal),
+              stims   = list(stims_food,stims_country,stims_mammal))
+
+```
+
+```{r}
+#| code-summary: "Create pairwise distance matrices"
+
+prepare_data <- function(df){
+  
+  df |> 
+    select(ID,ID_stim_1,ID_stim_2,norm_dist) %>%   
+    group_by(ID_stim_1,ID_stim_2) %>% 
+    summarize(avg_dist = mean(norm_dist,na.rm=T),.groups="drop") %>%  
+    arrange(ID_stim_1,ID_stim_2) %>%  
+    pivot_wider(names_from = ID_stim_1,values_from = avg_dist) %>% 
+    .[,-1] %>%  
+    as.matrix() %>%  
+    rbind(NA,.) %>%  
+    cbind(.,NA)
+
+}
+
+dfs <- dfs |>  mutate(dist_mat = purrr::map(dataset,prepare_data))
+
+```
+
+
+# Multidimensional Scaling                                
+
+```{r}
+#| code-summary: "Run loo-CV"
+
+# UNCOMMENT TO RUN LOO (~ 1h per data set)
+# loo_CV_MDS(dfs$dist_mat[[1]],
+#            max_dim  = 20,
+#            parallel = TRUE,
+#            n_cores  = 8,
+#            verbose  = TRUE) -> mds_loo_cv_FOOD
+
+# save(mds_loo_cv_FOOD,file="../Results/mds_loo_cv_food.Rdata")
+
+
+# loo_CV_MDS(dfs$dist_mat[[2]],
+#            max_dim  = 20,
+#            parallel = TRUE,
+#            n_cores  = 8,
+#            verbose  = TRUE) -> mds_loo_cv_COUNTRIES
+
+
+# save(mds_loo_cv_FOOD,file="../Results/mds_loo_cv_countries.Rdata")
+
+
+# loo_CV_MDS(dfs$dist_mat[[3]],
+#            max_dim  = 20,
+#            parallel = TRUE,
+#            n_cores  = 8,
+#            verbose  = TRUE) -> mds_loo_cv_MAMMALS
+
+
+# save(mds_loo_cv_FOOD,file="../Results/mds_loo_cv_mammals.Rdata")
+
+
+mds_loo_cv_FOOD      <- get(load("../Results/mds_loo_cv_food.Rdata"))
+mds_loo_cv_COUNTRIES <- get(load("../Results/mds_loo_cv_countries.Rdata"))
+mds_loo_cv_MAMMALS   <- get(load("../Results/mds_loo_cv_mammals.Rdata"))
+
+
+# Put in dfs tibble
+dfs$mds_loo_cv <- list(mds_loo_cv_FOOD,mds_loo_cv_COUNTRIES,mds_loo_cv_MAMMALS)
+
+```
+
+```{r}
+#| code-summary: "Results"
+#| label: tbl-mdscv
+#| tbl-cap: "Results of MDS Cross-Validation"
+#| tbl-subcap: 
+#| - "Food"
+#| - "Countries"
+#| - "Mammals"
+#| layout-ncol: 3
+
+mds_res_tbl <- function(results) {
+  
+  results |>  
+    round(3) |>  
+    kbl(col.names = c("# Dim", "R²", "RMSE", "MSE"),align = "c") |> 
+    kable_paper(c("hover")) |>  
+    row_spec(which.min(results[,3]), bold = T, color = "white", background = clrs[2]) |>  
+    column_spec(1, width="6em")
+}
+
+
+
+  
+
+# Apply to all datasets in dfs
+dfs <- dfs |> mutate(mds_res = purrr::map(mds_loo_cv, mds_res_tbl))
+
+dfs$mds_res[[1]] 
+dfs$mds_res[[2]]
+dfs$mds_res[[3]]
+```
+
+# Determine MDS Representations (based on loo-cv)         
+
+
+```{r}
+#| code-summary: "Run MDS"
+# Run MDS
+
+# MDS_FOOD      <- dfs$dist_mat[[1]] %>%
+#                     MDShelper::fill_mat(diag_val = 0) %>%
+#                     smacof::mds(.,ndim=14, "ordinal",  principal = TRUE)
+
+# write_csv2(MDS_FOOD$conf %>% as.data.frame(), file="../Results/MDS_config_food.csv")
+
+# MDS_COUNTRIES <- dfs$dist_mat[[2]] %>%
+#                     MDShelper::fill_mat(diag_val = 0) %>%
+#                     smacof::mds(.,ndim=10, "ordinal",  principal = TRUE)
+
+# write_csv2(MDS_COUNTRIES$conf %>% as.data.frame(), file="../Results/MDS_config_countries.csv")
+
+# MDS_MAMMALS   <- dfs$dist_mat[[3]] %>%
+#                     MDShelper::fill_mat(diag_val = 0) %>%
+#                     smacof::mds(.,ndim=10, "ordinal",  principal = TRUE)
+
+# write_csv2(MDS_MAMMALS$conf %>% as.data.frame(), file="../Results/MDS_config_mammals.csv")
+
+
+# Load
+
+MDS_FOOD      <- read_csv2("../Results/MDS_config_food.csv")
+MDS_COUNTRIES <- read_csv2("../Results/MDS_config_countries.csv")
+MDS_MAMMALS   <- read_csv2("../Results/MDS_config_mammals.csv")
+
+
+# Put in dfs tibble
+dfs$mds_repr <- list(MDS_FOOD,MDS_COUNTRIES,MDS_MAMMALS)
+
+
+```
+
+
+```{r}
+#| code-summary: "Run MDS with D=10"
+
+# n_dim <- 20
+# 
+# MDS_FOOD      <- dfs$dist_mat[[1]] %>%
+#                     MDShelper::fill_mat(diag_val = 0) %>%
+#                     smacof::mds(.,ndim=n_dim, "ordinal",  principal = TRUE)
+# 
+# write_csv2(MDS_FOOD$conf %>% as.data.frame(col.names=paste0("dim_",1:20)),
+#            file="../Results/MDS_config_food_D20.csv")
+# 
+# MDS_COUNTRIES <- dfs$dist_mat[[2]] %>%
+#                     MDShelper::fill_mat(diag_val = 0) %>%
+#                     smacof::mds(.,ndim=n_dim, "ordinal",  principal = TRUE)
+# 
+# write_csv2(MDS_COUNTRIES$conf %>% as.data.frame(col.names=paste0("dim_",1:20)),
+#            file="../Results/MDS_config_countries_D20.csv")
+# 
+# MDS_MAMMALS   <- dfs$dist_mat[[3]] %>%
+#                     MDShelper::fill_mat(diag_val = 0) %>%
+#                     smacof::mds(.,ndim=n_dim, "ordinal",  principal = TRUE)
+# 
+# write_csv2(MDS_MAMMALS$conf %>% as.data.frame(col.names=paste0("dim_",1:20)),
+#            file="../Results/MDS_config_mammals_D20.csv")
+
+```
+
+
+# Figure: Scatterplot of observed vs. predicted distances 
+
+@fig-obsemp shows both the predicted distances of this final MDS-solution and the observed distances, as well as their correlation.
+
+```{r}
+#| code-summary: "Run MDS + Correlation + Plot"
+#| label: fig-obsemp
+#| fig-cap: "Scatterplot of observed and predicted distances"
+#| fig-height: 6
+#| fig-width:  15
+#| column: page
+
+
+obs_pred_plot <- function(mds_repr,dist_mat,names){
+  
+  # Compute Correlation
+  predicted <- mds_repr %>% as.matrix() %>% MDShelper::compute_dists(.,r=2) %>% as.vector() %>% na.omit()
+  observed  <- dist_mat %>% as.vector() %>%  na.omit()
+  cor       <- correlation(data.frame(predicted,observed))
+  
+  # Plot Observed ~ Predicted
+  p <- ggplot(data.frame(predicted,observed), aes(observed,predicted)) +
+    geom_point(shape=1, color = clrs[2],  size = 1.5, alpha = 0.35, stroke = 2) +
+    stat_smooth(method="lm",color="black",lwd=1.5) + 
+    ggplot2::annotate("text", x = 0.25, y = .75, parse=TRUE,
+                      label = paste0("italic(r)==",printnum(cor$r,gt1=F)), size = 7) +
+    theme_nice() +
+    labs(title = names,
+         y = ifelse(names == "Food","Predicted Distances",""),
+         x = ifelse(names == "Countries","Observed Distances",""))
+  
+  return(p)
+
+}
+
+
+dfs|> 
+  mutate(op_plot = pmap(list(mds_repr,dist_mat,names),obs_pred_plot)) |> 
+  pull(op_plot) |> 
+  wrap_plots()
+
+
+ggsave("../Figures/oberserved_predicted_dists.pdf", width = 40 , height = 15 , unit = "cm",
+       bg="white",dpi=300,device = cairo_pdf)
+```
+
+# Figure: Plot of first four dimensions                  
+
+@fig-mdsdim shows the combinations of the four MDS dimensions (**plotted with `check_overlap = TRUE`**).
+
+```{r}
+#| code-summary: "Plot MDS Dimensions"
+#| label: fig-mdsdim
+#| fig-cap: "Dimensions of the MDS Solution"
+#| fig-height: 7
+#| fig-width: 12
+#| column: page
+
+dfs$img_path <- c("../Materials/images/Reduce Quality/Food/",
+                  "../Materials/images/Reduce Quality/Countries/",
+                  "../Materials/images/Reduce Quality/Mammals/")
+
+
+plot_df <- function(mds_repr,stims,img_path){
+  
+  # Make tidy df for plotting
+  temp <- stims |>
+            select(ID,item,img) |> 
+            bind_cols(mds_repr) |> 
+            mutate(img_w_path = paste0(img_path,img))
+  
+  return(temp)
+  
+}
+  
+
+dfs <- dfs |> mutate(plot_df = pmap(list(mds_repr,stims,img_path),plot_df))
+
+
+
+
+# Plot Dimensions 1-2, 3-4 for each domain
+
+# Food
+p12_f <- ggplot(dfs$plot_df[[1]], aes(x = V1, y = V2, image=img_w_path)) +
+            geom_image(size=0.15) +
+            labs(x = "", y = "2. Dimension", title = dfs$names[[1]]) +
+            theme_nice() +
+            theme(text = element_text(size  = 16)) +
+            xlim(-0.5,0.6) + ylim(-0.6,0.45)
+ 
+p34_f <- ggplot(dfs$plot_df[[1]], aes(x = V3, y = V4, image=img_w_path)) +
+            geom_image(size=0.15) +
+            labs(x = "", y = "4. Dimension") +
+            theme_nice() +
+            theme(text = element_text(size  = 16)) +
+            xlim(-0.5,0.65) + ylim(-0.45,0.6)
+
+
+# Countries
+p12_c <- ggplot(dfs$plot_df[[2]], aes(x = V1, y = V2, image=img_w_path)) +
+            geom_image(size=0.23) +
+            labs(x = "1. Dimension", y = "", title = dfs$names[[2]]) +
+            theme_nice() +
+            theme(text = element_text(size  = 16)) +
+            xlim(-0.8,0.6) + ylim(-0.5,0.65)
+ 
+p34_c <- ggplot(dfs$plot_df[[2]], aes(x = V3, y = V4, image=img_w_path)) +
+            geom_image(size=0.23) +
+            labs(x = "3. Dimension", y = "") +
+            theme_nice() +
+            theme(text = element_text(size  = 16)) +
+            xlim(-0.63,0.63) + ylim(-0.5,0.55)
+ 
+ 
+
+# Mammals
+p12_m <- ggplot(dfs$plot_df[[3]], aes(x = V1, y = V2, image=img_w_path)) +
+            geom_image(size=0.15) +
+            labs(x = "", y = "", title = dfs$names[[3]]) +
+            theme_nice() +
+            theme(text = element_text(size  = 16)) +
+            xlim(-0.65,0.62) + ylim(-0.75,0.55)
+ 
+p34_m <- ggplot(dfs$plot_df[[3]], aes(x = V3, y = V4, image=img_w_path)) +
+            geom_image(size=0.15) +
+            labs(x = "", y = "") +
+            theme_nice() +
+            theme(text = element_text(size  = 16)) +
+            xlim(-0.91,0.4) + ylim(-0.35,0.65)
+
+
+
+
+((p12_f + p12_c + p12_m) + theme(plot.margin = unit(c(0,0,30,0), "pt"))) / (p34_f + p34_c + p34_m)
+
+
+ggsave("../Figures/example_dimensions.pdf", width = 32 , height = 20 , unit = "cm",
+       bg="white",dpi=300,device = cairo_pdf)
+
+ggsave("../Figures/example_dimensions.png", width = 32 , height = 20 , unit = "cm",
+       bg="white",dpi=300)
+```
+

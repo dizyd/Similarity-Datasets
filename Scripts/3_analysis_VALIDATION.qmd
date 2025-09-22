@@ -1,0 +1,173 @@
+---
+title: "Analysis Part 3:"
+subtitle: "Validation Analysis"
+date: "`r Sys.Date()`"
+author: "David Izydorczyk"
+format: 
+  html:
+    code-fold: true
+    code-copy: true
+    code-tools: true
+    df-print: kable
+    toc: true
+    toc-location: right
+    fig-height: 4
+    fig-width:  9
+    fig-cap-location: top
+    tab-cap-location: top
+    embed-resources: true
+    grid:
+      margin-width: 350px
+execute:
+  warning: false
+  messages: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup}
+#| code-summary: "Load packages & ggplot theme"
+#| cache: false
+
+# Packages
+library(tidyverse)
+library(patchwork)
+library(knitr)
+library(kableExtra)
+library(psych)
+library(parameters)
+
+
+source("../Scripts/plot_settings.R")
+source("../Scripts/helper_functions.R")
+```
+
+```{r data}
+#| code-summary: "Load data"
+
+# Load data sets
+est <- read_csv("../Data/estimation_data.csv")
+
+# Load MDS cues
+mds_food      <- read_csv2("../Results/MDS_config_food.csv")      |> add_column(ID_item = 1:80)
+mds_countries <- read_csv2("../Results/MDS_config_countries.csv") |> add_column(ID_item = 1:80)
+mds_mammals   <- read_csv2("../Results/MDS_config_mammals.csv")   |> add_column(ID_item = 1:80)
+
+
+# Merge est and mds
+df_food      <- est |> 
+                  filter(domain == "Food") |> 
+                  left_join(mds_food,by="ID_item") 
+
+df_countries <- est |> 
+                  filter(domain == "Countries") |> 
+                  left_join(mds_countries,by="ID_item") 
+
+df_mammals   <- est |> 
+                  filter(domain == "Mammals") |> 
+                  left_join(mds_mammals,by="ID_item")
+
+
+# Combine into tibble
+dfs <- tibble(names   = c("Food", "Countries", "Mammals"),
+              dataset = list(df_food,df_countries,df_mammals))
+
+```
+
+
+```{r}
+#| code-summary: "Regression: True crit ~ MDS Cues"
+
+compute_reg_true <- function(dataset){
+  
+  temp <- dataset |> 
+          select(ID_item,crit,starts_with("V")) |> 
+          distinct() 
+
+  lm(crit ~ . -ID_item, data = temp) |> 
+    model_parameters(include_info=T)
+  
+}
+
+
+dfs <- dfs |> mutate(reg_true = map(dataset,compute_reg_true))
+
+dfs$reg_true
+
+```
+
+
+
+
+```{r}
+#| code-summary: "Regression: Est crit ~ MDS Cues"
+#| label: tbl-adjr2
+#| tbl-cap: "Adjusted R² per per Person"
+
+# Compute adjusted R² oer person
+compute_reg_est <- function(dataset){
+  
+  temp   <- dataset |> 
+              select(ID,ID_item,est,starts_with("V")) |> 
+              distinct()
+  
+  IDs    <- temp$ID |> unique()
+  adj_r2 <- vector("numeric",length = length(IDs))
+  
+  for(i in 1:length(IDs)){
+    
+    mod <- lm(est ~ ., data = temp |> filter(ID == IDs[i]) |> select(-ID,-ID_item))
+    
+    adj_r2[i] <- summary(mod)$adj.r.squared
+    
+  }
+  
+  return(adj_r2)
+  
+}
+
+dfs <- dfs |> mutate(reg_est = map(dataset,compute_reg_est))
+
+# Compute descriptives per domain
+dfs |> 
+  transmute(names, adj_r2 = map(reg_est, ~ .x |> describe() |> as_tibble()))  |> 
+  unnest(adj_r2) |>
+  select(names, mean, sd, min, max) |>
+  kable(col.names = c("Domain", "M", "SD","Min","Max"), align = "c", digits = 2) |> 
+    kable_paper(c("hover"))
+```
+
+
+
+```{r}
+#| code-summary: "Plot distribution of adjusted R²s"
+#| label: fig-adjR2
+#| fig-cap: "Distribution of adjusted R²s"
+#| fig-height: 6
+#| fig-width:  15
+#| column: page
+
+
+adjR2_plot <- function(reg_est,names){
+  
+ ggplot(data.frame(reg_est), aes(x = reg_est)) +
+    geom_histogram(bins=20, color = "black", fill = clrs[2]) +
+    scale_x_continuous(breaks = seq(0, 1, by=0.25),labels=dropLeading0) +
+    theme_nice() + 
+    labs(title = names,
+         y     = ifelse(names == "Food","Frequency",""),
+         x     = ifelse(names == "Countries","Adjusted R²",""))
+
+}
+
+
+dfs|> 
+  mutate(adjR2_plot = pmap(list(reg_est,names),adjR2_plot)) |> 
+  pull(adjR2_plot) |> 
+  wrap_plots()
+
+
+ggsave("../Figures/distr_adjR2.pdf", width = 30 , height = 10 , unit = "cm",
+       bg="white",dpi=300,device = cairo_pdf)
+```
+

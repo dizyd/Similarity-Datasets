@@ -1,0 +1,94 @@
+---
+title: "Analysis Part 0: "
+subtitle: "Demographics"
+date: "`r Sys.Date()`"
+author: "David Izydorczyk"
+format: 
+  html:
+    code-fold: true
+    code-copy: true
+    code-tools: true
+    df-print: kable
+    toc: true
+    toc-location: right
+    fig-height: 4
+    fig-width:  9
+    fig-cap-location: top
+    tab-cap-location: top
+    embed-resources: true
+    grid:
+      margin-width: 350px
+execute:
+  warning: false
+  messages: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup}
+#| code-summary: "Load packages & ggplot theme"
+#| cache: false
+
+# Packages
+library(tidyverse)
+library(kableExtra)
+library(psych)
+
+source("../Scripts/plot_settings.R")
+source("../Scripts/helper_functions.R")
+```
+
+```{r data}
+#| code-summary: "Load data"
+
+# Load data sets
+
+df_food    <- read_csv2("../Data/3 Food/data_analysis_similarity_food.csv")
+
+df_country <- read_csv2("../Data/1 Countries/data_analysis_similarity_country.csv")  
+
+df_mammal  <- read_csv2("../Data/2 Mammals/data_analysis_similarity_mammals.csv") 
+
+# Combine into tibble
+dfs <- tibble(names   = c("Food", "Countries", "Mammals"),
+              dataset = list(df_food,df_country,df_mammal))
+
+```
+
+
+# Demographics                         
+
+```{r}
+#| code-summary: "Compute demographic summary"
+
+demo <- dfs  |> 
+ transmute(names, demo = purrr::map(dataset , ~ .x |>
+                                      select(ID,age,gender) |>
+                                      distinct() |>
+                                      demo_summary()))
+demo$demo |>
+  bind_rows() |> 
+  add_column(names=demo$names) |> 
+  select(names, total_sample_size,
+         mean_age, sd_age, min_age, max_age,
+         percent_male, percent_female, percent_non_binary) |>
+  kable(digits = 2)
+```
+
+# Descriptive: Pairs                             
+
+```{r}
+#| code-summary: "Compute descriptive statistics of pairs"
+
+pairs <- dfs |> 
+          transmute(names, pairs = purrr::map(dataset, ~ .x |>
+                                                    count(pair_ID)  |> 
+                                                    pull(n) |>
+                                                    describe()))  |> 
+          unnest(pairs)
+
+
+pairs |>
+  select(names, mean, sd, min, max) |>
+  kable(digits = 2)
+```
