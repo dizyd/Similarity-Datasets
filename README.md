@@ -52,7 +52,7 @@ This repository contains the data, materials, and the code to reproduce all anal
 <br>
 
 
-This work, including all figures, is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License</a>.  All code is licensed under the MIT License.
+This work, including all figures, is licensed under a <a rel="license" href=" https://creativecommons.org/licenses/by-nc-sa/4.0/ ">CC BY-NC-SA 4.0</a>.  All code is licensed under the MIT License.
 
 <br>
 
