@@ -61,7 +61,7 @@ David Izydorczyk & Arndt Bröder
 
 
 ## Abstract
-Will be added soon.
+Three comprehensive sets of naturalistic stimuli, each with pairwise similarity ratings and multidimensional scaling (MDS)–based feature representations, are presented and freely available under a CC BY-NC-ND license (https://github.com/dizyd/Similarity-Datasets). The sets include 80 representative items from three domains — foods, mammals, and countries — that can be used across cognitive research areas such as categorization, multiple-cue probability learning, judgment, decision-making, memory, and metamemory. Based on over 280,000 similarity judgments from $N = 1,798$ participants, we derived 14 feature dimensions for foods, 10 for mammals, and 10 for countries, which reconstructed the similarity spaces with high accuracy ($r \geq .93$). In a proof-of-concept study, these dimensions also explained substantial variance in participants’ numerical judgments of domain-specific criteria, underscoring their functional relevance beyond similarity tasks. By making these stimuli, similarity data, and derived feature spaces freely available, we provide researchers with tools for testing computational cognitive models in relevant real-world domains, each of which allows for examining a multitude of judgment or classification criteria.
 
 ## Publication
 (work in progress)
