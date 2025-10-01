@@ -4,7 +4,11 @@
 
 ## About this repository
 
-This repository contains the data, materials, and the code to reproduce all analyses and figures in the project *Food, Mammals, & Countries: Stimuli, their Pairwise Similarities and MDS-Dimension Values for Modeling Judgment, Categorization, and Memory in three Real-World Domains*. The structure of this repository is as follows:
+This repository contains the data, materials, and the code to reproduce all analyses and figures in the project *Food, Mammals, & Countries: Stimuli, their Pairwise Similarities and MDS-Dimension Values for Modeling Judgment, Categorization, and Memory in three Real-World Domains*. Below you can find information about:
+
+- the folder and file structure of this repository
+- the versions of all R packages used in the analysis (i.e., the session info)
+- and information about the paper (i.e., contributing authors, abstract, link to publication (if available))
 
 <br>
 
@@ -56,20 +60,6 @@ This work, including all figures, is licensed under a <a rel="license" href=" ht
 
 <br>
 
-## Contributing Authors
-David Izydorczyk & Arndt Bröder
-
-
-## Abstract
-Three comprehensive sets of naturalistic stimuli, each with pairwise similarity ratings and multidimensional scaling (MDS)–based feature representations, are presented and freely available under a CC BY-NC-ND license (https://github.com/dizyd/Similarity-Datasets). The sets include 80 representative items from three domains — foods, mammals, and countries — that can be used across cognitive research areas such as categorization, multiple-cue probability learning, judgment, decision-making, memory, and metamemory. Based on over 280,000 similarity judgments from $N = 1,798$ participants, we derived 14 feature dimensions for foods, 10 for mammals, and 10 for countries, which reconstructed the similarity spaces with high accuracy ($r \geq .93$). In a proof-of-concept study, these dimensions also explained substantial variance in participants’ numerical judgments of domain-specific criteria, underscoring their functional relevance beyond similarity tasks. By making these stimuli, similarity data, and derived feature spaces freely available, we provide researchers with tools for testing computational cognitive models in relevant real-world domains, each of which allows for examining a multitude of judgment or classification criteria.
-
-## Publication
-(work in progress)
-
-## Funding
-This research was funded by Grant IZ 96/1-1 provided to David Izydorczyk from the German Research Foundation (DFG) and supported by the University of Mannheim’s Graduate School of Economic and Social Sciences.
-
-
 
 
 ## Session Info
@@ -89,3 +79,15 @@ packages:
 [29] tidyr_1.3.1        tibble_3.2.1       ggplot2_3.5.2      tidyverse_2.0.0 
 
 ```
+
+## Contributing Authors
+David Izydorczyk & Arndt Bröder
+
+
+## Abstract
+Three comprehensive sets of naturalistic stimuli, each with pairwise similarity ratings and multidimensional scaling (MDS)–based feature representations, are presented and freely available under a CC BY-NC-ND license (https://github.com/dizyd/Similarity-Datasets). The sets include 80 representative items from three domains — foods, mammals, and countries — that can be used across cognitive research areas such as categorization, multiple-cue probability learning, judgment, decision-making, memory, and metamemory. Based on over 280,000 similarity judgments from $N = 1,798$ participants, we derived 14 feature dimensions for foods, 10 for mammals, and 10 for countries, which reconstructed the similarity spaces with high accuracy ($r \geq .93$). In a proof-of-concept study, these dimensions also explained substantial variance in participants’ numerical judgments of domain-specific criteria, underscoring their functional relevance beyond similarity tasks. By making these stimuli, similarity data, and derived feature spaces freely available, we provide researchers with tools for testing computational cognitive models in relevant real-world domains, each of which allows for examining a multitude of judgment or classification criteria.
+
+## Publication
+(work in progress)
+
+
