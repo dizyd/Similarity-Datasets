@@ -4,7 +4,7 @@
 
 ## About this repository
 
-This repository contains the data, materials, and the code to reproduce all analyses and figures in the project *Food, Mammals, & Countries: Stimuli, their Pairwise Similarities and MDS-Dimension Values for Modeling Judgment, Categorization, and Memory in three Real-World Domains*. Below you can find information about:
+This repository contains the data, materials, and the code to reproduce all analyses and figures in the project *Food, Mammals, & Countries: Stimuli, their Pairwise Similarities and MDS-Dimension Values for Modeling Judgment, Categorization, and Memory in three Real-World Domains*. The contents of this repository are also available on [OSF](https://osf.io/a32pv/) Below you can find information about:
 
 - the folder and file structure of this repository
 - the versions of all R packages used in the analysis (i.e., the session info)
