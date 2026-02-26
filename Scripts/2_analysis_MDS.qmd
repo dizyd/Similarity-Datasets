@@ -92,6 +92,11 @@ prepare_data <- function(df){
 
 dfs <- dfs |>  mutate(dist_mat = purrr::map(dataset,prepare_data))
 
+# Save distance matrices
+write_csv2(dfs$dist_mat[[1]] |> as.data.frame(),file="../Results/dist_mat_food.csv")
+write_csv2(dfs$dist_mat[[2]] |> as.data.frame(),file="../Results/dist_mat_countries.csv")
+write_csv2(dfs$dist_mat[[3]] |> as.data.frame(),file="../Results/dist_mat_mammals.csv")
+
 ```
 
 
