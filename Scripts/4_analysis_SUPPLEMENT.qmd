@@ -1,0 +1,247 @@
+---
+title: "Supplement"
+subtitle: ""
+date: "`r Sys.Date()`"
+author: "David Izydorczyk"
+format: 
+  html:
+    code-fold: true
+    code-copy: true
+    code-tools: true
+    df-print: kable
+    toc: true
+    toc-location: right
+    fig-height: 4
+    fig-width:  9
+    fig-cap-location: top
+    tab-cap-location: top
+    embed-resources: true
+    grid:
+      margin-width: 350px
+execute:
+  warning: false
+  messages: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup}
+#| code-summary: "Load packages & ggplot theme"
+#| cache: false
+
+# Packages
+library(tidyverse)
+library(patchwork)
+library(knitr)
+library(kableExtra)
+library(psych)
+library(parameters)
+library(correlation)
+library(papaja)
+library(ggdist)
+library(fastDummies)
+library(ggcorrplot)
+library(latex2exp)
+
+source("../Scripts/plot_settings.R")
+source("../Scripts/helper_functions.R")
+```
+
+```{r data}
+#| code-summary: "Load data"
+
+# Load external variables
+ext_food      <- read_csv2("../Materials/external_vars_foods.csv") 
+ext_countries <- read_csv2("../Materials/external_vars_countries.csv") 
+ext_mammals   <- read_csv2("../Materials/external_vars_mammals.csv") 
+
+# Load MDS cues
+mds_food      <- read_csv2("../Results/MDS_config_food.csv")      |> add_column(ID = 1:80)
+mds_countries <- read_csv2("../Results/MDS_config_countries.csv") |> add_column(ID = 1:80)
+mds_mammals   <- read_csv2("../Results/MDS_config_mammals.csv")   |> add_column(ID = 1:80)
+
+
+# Merge ext and mds
+ext_food      <- ext_food      |> left_join(mds_food,by="ID") 
+ext_countries <- ext_countries |> left_join(mds_countries,by="ID") 
+ext_mammals   <- ext_mammals   |> left_join(mds_mammals,by="ID")
+```
+
+```{r options}
+save_plots = TRUE
+```
+
+
+## External variables 
+
+```{r}
+#| code-summary: "Plot correlations"
+#| label: fig-corrFood
+#| fig-cap: "Correlations of MDS with external variables (Food)"
+#| fig-height: 6
+#| fig-width:  15
+#| column: page
+
+
+temp_ext_food <- ext_food |>
+                    dummy_cols(select_columns          = "category",
+                               remove_first_dummy      = FALSE,   # keep all categories
+                               remove_selected_columns = FALSE) |>
+                    select(-category) |> 
+                    mutate(cat_fruit_veg = category_Fruits + category_Vegetables) |> 
+                    select(g_carbohydrates_per100g:g_fat_per100g,contains("cat"),V1:V14) |> 
+                    rename_with(~ paste0("D", seq_along(.x)), matches("^V\\d+$"))  
+
+corr_ext_food <- temp_ext_food |>
+                    correlation() |>
+                    summary() %>%
+                    .[1:14,c(1,15:2)] |> 
+                    as.data.frame()
+
+# Melt data to long format
+p1 <- corr_ext_food |> 
+    pivot_longer(cols      = starts_with("D"),
+                 names_to  = "Dimension",
+                 values_to = "Correlation") |> 
+    mutate(Dimension = fct_relevel(Dimension,paste0("D",1:14))) |> 
+    ggplot(aes(x = Dimension, y = Parameter, fill = Correlation)) +
+      geom_tile(colour = "white")  +
+      scale_fill_viridis_c(guide="none",limits = c(-1,1)) +
+      theme_nice() + 
+      geom_text(aes(label=papaja::printnum(Correlation,
+                                           gt1 = FALSE)), color="black") +
+      theme(axis.title = element_blank(),
+            legend.position = "right",
+            axis.text.x = element_text(angle = 45, hjust = 1)) +
+      labs(fill = "Abs(r)",x = "", y = "",
+           title = "Food")
+
+p1
+
+if(save_plots){
+  
+ ggsave("../Figures/S_corr_food.pdf", width = 50 , height = 20 , unit = "cm",
+       bg="white",dpi=300,device = cairo_pdf) 
+}
+
+```
+
+```{r}
+#| code-summary: "Plot correlations"
+#| label: fig-corrCountries
+#| fig-cap: "Correlations of MDS with external variables (Countries)"
+#| fig-height: 6
+#| fig-width:  15
+#| column: page
+
+
+temp_ext_countries <- ext_countries |>
+                        dummy_cols(select_columns          = "continent",
+                                   remove_first_dummy      = FALSE,   # keep all categories
+                                   remove_selected_columns = FALSE) |>
+                        select(-continent) |>  
+                        select(latitude:HDI,contains("continent"),V1:V10) |> 
+                        rename_with(~ paste0("D", seq_along(.x)), matches("^V\\d+$"))  
+
+corr_ext_countries <- temp_ext_countries |>
+                        correlation() |>
+                        summary() %>%
+  
+                        .[1:16,c(1,11:2)] |> 
+                        as.data.frame()
+
+# Melt data to long format
+p2 <- corr_ext_countries |> 
+    pivot_longer(cols      = starts_with("D"),
+                 names_to  = "Dimension",
+                 values_to = "Correlation") |> 
+    mutate(Dimension = fct_relevel(Dimension,paste0("D",1:10))) |> 
+    ggplot(aes(x = Dimension, y = Parameter, fill = Correlation)) +
+      geom_tile(colour = "white")  +
+      scale_fill_viridis_c(guide="none",limits = c(-1,1)) +
+      coord_equal() +
+      theme_nice() + 
+      geom_text(aes(label=papaja::printnum(Correlation,
+                                           gt1 = FALSE)), color="black") +
+      theme(axis.title = element_blank(),
+            legend.position = "right",
+            axis.text.x = element_text(angle = 45, hjust = 1)) +
+      labs(fill = "Abs(r)",x = "", y = "",
+           title = "Countries")
+
+p2 
+
+if(save_plots){
+  
+  ggsave("../Figures/S_corr_countries.pdf", width = 50 , height = 20 , unit = "cm",
+       bg="white",dpi=300,device = cairo_pdf)
+}
+
+```
+
+```{r}
+#| code-summary: "Plot correlations"
+#| label: fig-corrMammals
+#| fig-cap: "Correlations of MDS with external variables (Mammals)"
+#| fig-height: 6
+#| fig-width:  15
+#| column: page
+
+
+temp_ext_mammals <- ext_mammals |>
+                      dummy_cols(select_columns          = "category",
+                               remove_first_dummy      = FALSE,   # keep all categories
+                               remove_selected_columns = FALSE) |>
+                      select(-category) |> 
+                      mutate(has_fur = ifelse(has_fur == "Yes",1,0),
+                             has_tail = ifelse(has_tail == "Yes",1,0),
+                             has_legs = ifelse(has_legs == "Yes",1,0)) |> 
+                      select(female_maturity_days:main_color,contains("cat"),V1:V10) |> 
+                      rename_with(~ paste0("D", seq_along(.x)), matches("^V\\d+$"))  
+
+corr_ext_mammals <- temp_ext_mammals |>
+                    correlation(include_factors = TRUE) |>
+                    summary() %>%
+                    .[c(1:40),c(1,15:2)] |> 
+                    as.data.frame()
+
+p3 <- corr_ext_mammals |> 
+    pivot_longer(cols      = starts_with("D"),
+                 names_to  = "Dimension",
+                 values_to = "Correlation") |> 
+    mutate(Dimension = fct_relevel(Dimension,paste0("D",1:10))) |> 
+    ggplot(aes(x = Dimension, y = Parameter, fill = Correlation)) +
+      geom_tile(colour = "white")  +
+      scale_fill_viridis_c(limits = c(-1,1)) +
+      coord_equal() +
+      theme_nice() + 
+      geom_text(aes(label=papaja::printnum(Correlation,
+                                           gt1 = FALSE)), color="black") +
+      theme(axis.title = element_blank(),
+            legend.position = "right",
+            axis.text.x = element_text(angle = 45, hjust = 1)) +
+      labs(fill = TeX("$\\textit{r}$"),x = "", y = "",
+           title = "Mammals")
+
+p3
+
+if(save_plots){
+  ggsave("../Figures/S_corr_mammals.pdf", width = 50 , height = 30 , unit = "cm",
+         bg="white",dpi=300,device = cairo_pdf)
+}
+```
+
+```{r}
+#| include: false
+
+(p1/p2) | p3 +
+  plot_annotation(tag_levels = 'A') + plot_layout(guides='collect') 
+
+
+
+#+ plot_layout(widths = c(14/14, 10/14, 10/14))
+ggsave("../Figures/S_corrs.pdf", width = 45 , height = 30 , unit = "cm",
+       bg="white",dpi=300,device = cairo_pdf)
+
+```
+

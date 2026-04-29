@@ -36,6 +36,9 @@ library(knitr)
 library(kableExtra)
 library(psych)
 library(parameters)
+library(correlation)
+library(papaja)
+library(ggdist)
 
 
 source("../Scripts/plot_settings.R")
@@ -46,7 +49,8 @@ source("../Scripts/helper_functions.R")
 #| code-summary: "Load data"
 
 # Load data sets
-est <- read_csv("../Data/estimation_data.csv")
+est <- read_csv("../Data/estimation_data.csv") |> mutate(item    = ID_item,
+                                                         ID_item = parse_number(img))
 
 # Load MDS cues
 mds_food      <- read_csv2("../Results/MDS_config_food.csv")      |> add_column(ID_item = 1:80)
@@ -74,6 +78,70 @@ dfs <- tibble(names   = c("Food", "Countries", "Mammals"),
 
 ```
 
+## Estimation Performance
+
+```{r}
+#| code-summary: "Correlation: Avg. Est crit ~ True Crit"
+#| label: tbl-corrAvgEstTrue
+#| tbl-cap: "Correlation between avg. estimated and true criterion"
+
+temp <- est |> 
+          filter(training == 0) |>
+          group_by(domain, ID_item) |>
+          summarize(m_true = mean(true, na.rm=T),
+                    m_est  = mean(est,  na.rm=T)) |>
+          group_by(domain) |>
+          select(-ID_item) |> 
+          correlation()
+
+# Create Table
+temp |> 
+  as.data.frame() |> 
+  mutate(CI = paste0("[",print_num(CI_low),", ",print_num(CI_high),"]"),
+         p  = print_p(p))  |> 
+  select(Group , r, CI, t, df_error, p) |>
+  kable(col.names = c("Domain", "r", "CI","t","df","p"), align = "c", digits = 2) |> 
+    kable_paper(c("hover"))
+
+
+
+p1 <- est |> 
+        #filter(training == 0) |>
+        mutate(trained = ifelse(training == 0, "no"," yes")) |> 
+        group_by(domain, ID_item,trained) |>
+        summarize(m_true = mean(true, na.rm=T),
+                  m_est  = mean(est,  na.rm=T),
+                  se_est = sd(est, na.rm = TRUE) / sqrt(n()), 
+                  .groups = "drop") |> 
+        # Calculate a facet-specific width (e.g., 2% of the local x-range)
+        group_by(domain) |> 
+        mutate(dynamic_width = (max(m_true) - min(m_true)) * 0.05) |> 
+        ggplot(aes(x = m_true , y = m_est, fill = factor(trained))) +
+          geom_abline(slope = 1, intercept = 0, lty ="dashed") +
+          geom_errorbar(aes(ymin = m_est - se_est,
+                            ymax = m_est + se_est, width = dynamic_width), 
+                  color = "black", alpha = 0.6) +
+          geom_smooth(method='lm', color = clrs[2], fill = clrs[2], linewidth = 1.5) +
+          geom_point(size = 2, shape = 21) +
+          facet_wrap(.~domain, scales="free") +
+          scale_fill_manual(values = c("grey75","grey25")) +
+          theme_nice() +
+          labs(x = "Actual criterion",
+               y = "Avg. estimated criterion",
+               fill = "Trained Item") +
+          theme(
+              legend.position  = "right"
+            )
+
+p1
+
+
+```
+
+
+## Environmental Validity of MDS Dimensions
+
+## True Criterion Value ~ MDS Dimensions
 
 ```{r}
 #| code-summary: "Regression: True crit ~ MDS Cues"
@@ -81,33 +149,72 @@ dfs <- tibble(names   = c("Food", "Countries", "Mammals"),
 compute_reg_true <- function(dataset){
   
   temp <- dataset |> 
-          select(ID_item,crit,starts_with("V")) |> 
+          select(ID_item,true,starts_with("V")) |> 
           distinct() 
 
-  lm(crit ~ . -ID_item, data = temp) |> 
+  lm(true ~ . -ID_item, data = temp) |> 
     model_parameters(include_info=T)
   
 }
 
-
 dfs <- dfs |> mutate(reg_true = map(dataset,compute_reg_true))
 
-dfs$reg_true
-
+dfs |> 
+  transmute(names, adj_r2 = map(reg_true, ~ attributes(.x)$r2$R2_adjusted))  |> 
+  unnest(adj_r2) |>
+  select(names, adj_r2) |>
+  kable(col.names = c("Domain", "adjusted R²"), align = "c", digits = 2) |> 
+    kable_paper(c("hover"))
 ```
 
+## Avg. Estimated Criterion ~ MDS Dimensions
+
+```{r}
+#| code-summary: "Correlation: Avg. Est crit ~ MDS Cues"
+#| label: tbl-corrAvgEstTrue
+#| tbl-cap: "Correlation between avg. estimated and true criterion"
 
 
+
+compute_avg_est_mds <- function(dataset){
+  
+  temp <- dataset |> 
+            filter(training == 0) |>
+            group_by(ID_item) |>
+            mutate(m_est = mean(est, na.rm=T)) |> 
+            select(ID_item, m_est, starts_with("V")) |> 
+            distinct() |> 
+            ungroup()
+  
+  mod  <- lm(m_est ~ ., data = temp |> select(-ID_item))
+    
+  return(model_parameters(mod, include_info=TRUE))
+  
+}
+
+dfs <- dfs |> mutate(avg_est_mds = map(dataset,compute_avg_est_mds))
+
+# Create Table
+dfs |> 
+  transmute(names, adj_r2 = map(avg_est_mds, ~ attributes(.x)$r2$R2_adjusted))  |> 
+  unnest(adj_r2) |>
+  select(names, adj_r2) |>
+  kable(col.names = c("Domain", "adjusted R²"), align = "c", digits = 2) |> 
+    kable_paper(c("hover"))
+```
+
+## Individual Estimated Criterio ~ MDS Dimensions
 
 ```{r}
 #| code-summary: "Regression: Est crit ~ MDS Cues"
 #| label: tbl-adjr2
-#| tbl-cap: "Adjusted R² per per Person"
+#| tbl-cap: "Adjusted R² per Person"
 
 # Compute adjusted R² oer person
 compute_reg_est <- function(dataset){
   
   temp   <- dataset |> 
+              filter(training == 0) |>
               select(ID,ID_item,est,starts_with("V")) |> 
               distinct()
   
@@ -122,7 +229,7 @@ compute_reg_est <- function(dataset){
     
   }
   
-  return(adj_r2)
+  return(data.frame(ID = IDs, adj_r2))
   
 }
 
@@ -130,14 +237,14 @@ dfs <- dfs |> mutate(reg_est = map(dataset,compute_reg_est))
 
 # Compute descriptives per domain
 dfs |> 
-  transmute(names, adj_r2 = map(reg_est, ~ .x |> describe() |> as_tibble()))  |> 
+  transmute(names, adj_r2 = map(reg_est, ~ .x$adj_r2 |> describe() |> as_tibble()))  |> 
   unnest(adj_r2) |>
   select(names, mean, sd, min, max) |>
   kable(col.names = c("Domain", "M", "SD","Min","Max"), align = "c", digits = 2) |> 
     kable_paper(c("hover"))
 ```
 
-
+# Plot Distribution of R²
 
 ```{r}
 #| code-summary: "Plot distribution of adjusted R²s"
@@ -150,7 +257,7 @@ dfs |>
 
 adjR2_plot <- function(reg_est,names){
   
- ggplot(data.frame(reg_est), aes(x = reg_est)) +
+ ggplot(data.frame(adj_r2 = reg_est$adj_r2), aes(x = adj_r2)) +
     geom_histogram(bins=20, color = "black", fill = clrs[2]) +
     scale_x_continuous(breaks = seq(0, 1, by=0.25),labels=dropLeading0) +
     theme_nice() + 
@@ -161,13 +268,143 @@ adjR2_plot <- function(reg_est,names){
 }
 
 
-dfs|> 
+p1 <- dfs|> 
   mutate(adjR2_plot = pmap(list(reg_est,names),adjR2_plot)) |> 
   pull(adjR2_plot) |> 
   wrap_plots()
 
+p1
+
 
 ggsave("../Figures/distr_adjR2.pdf", width = 30 , height = 10 , unit = "cm",
        bg="white",dpi=300,device = cairo_pdf)
+
 ```
 
+# Plot Adjusted R² ~ Estimation Accuracy per Person
+
+```{r}
+#| code-summary: "Adjusted R² ~ Estimation Accuracy per Person"
+#| label: tbl-adjr2RMSE
+#| tbl-cap: "Relationship between adjusted R² and RMSE per Person"
+#| fig-height: 6
+#| fig-width:  15
+#| column: page
+
+# Compute adjusted R² per person
+compute_RMSE <- function(dataset){
+  
+  temp <- dataset |> 
+              filter(training == 0) |> 
+              select(ID,ID_item,est,true) |> 
+              distinct()
+  
+  # Add small value because of 0 in true and estimated values in the food domain
+  RMSE <- temp |> 
+           group_by(ID) |> 
+           summarize(RMSE = sqrt(mean((est-true)^2,na.rm=TRUE))) #
+  # mean(abs(log10((est+0.00001)/(true+0.00001))),na.rm=TRUE)
+  
+  return(RMSE)
+  
+}
+
+dfs          <- dfs |> mutate(RMSE = map(dataset,compute_RMSE))
+
+temp <- dfs |> 
+          select(names, RMSE, reg_est) |> 
+          mutate(combined_metrics = map2(RMSE, reg_est, function(rmse_df, r2_vec) {
+            inner_join(rmse_df, r2_vec, by = "ID")})) |> 
+          select(names, combined_metrics) %>%
+          unnest(combined_metrics)
+
+
+
+temp |> 
+  group_by(names) |> 
+  correlation()
+# without the one in countries > 15: -0.56 | [-0.73, -0.32]
+
+r_df <- data.frame(names = c("Countries","Food","Mammals"),
+                   r      = c("italic('r')(46)~`=`~-.45","italic('r')(44)~`=`~-.53","italic('r')(46)~`=`~-.11"),
+                   y      = c(0.7, 0.82, 0.8),
+                   x      = c(12,37, 1050))
+
+
+p2.1.1 <- temp |>
+            filter(names == "Countries") |> 
+            ggplot(aes(x = RMSE , y = adj_r2)) +
+              geom_point(size = 3, shape = 21, fill = "grey") +
+              geom_smooth(method='lm', color = clrs[2], fill = clrs[2], linewidth = 1.5) +
+              geom_text(aes(x, y, label=r), data=r_df |> filter(names == "Countries"),
+                        vjust=1, size = 5,parse = T) +
+              theme_nice() + labs(x = "RMSE" , y = "Adjusted R²", title = "Countries") +
+              coord_cartesian(ylim=c(0,1)) +
+              scale_y_continuous(breaks = seq(0, 1, by=0.25),labels=dropLeading0)
+            
+p2.1.2 <- temp |>
+              filter(names == "Countries") |> 
+              ggplot(aes(y = adj_r2 , x = names)) +
+                scale_y_continuous(breaks = seq(0, 1, by=0.25),limits = c(0,1),
+                                   labels=dropLeading0) +
+                # stat_slabinterval(breaks = 15, slab_color = "black", outline_bars = T,
+                #                   fill =clrs[2], slab_linewidth = 0.1) +
+                stat_dots(slab_color = "black", fill = "grey", point_size = 5, linewidth = 1) +
+                #geom_boxplot(width = .25, fill = clrs[2], color = "black") +
+                # geom_point(size = 2, shape = 21, fill = "grey",
+                #            position = position_jitter(seed = 1, width = .05)) +
+                theme_void() 
+
+p2.2.1 <- temp |>
+            filter(names == "Food") |> 
+            mutate(adj_r2 = ifelse(adj_r2 < 0, 0, adj_r2)) |>  # for plotting
+            ggplot(aes(x = RMSE , y = adj_r2)) +
+              geom_point(size = 3, shape = 21, fill = "grey") +
+              geom_smooth(method='lm', color = clrs[2], fill = clrs[2], linewidth = 1.5) +
+              geom_text(aes(x, y, label=r), data=r_df |> filter(names == "Food"),
+                        vjust=1, size = 5,parse = T) +
+              theme_nice() + labs(x = "RMSE" , y = "Adjusted R²", title = "Food") +
+              coord_cartesian(ylim=c(0,1)) +
+              scale_y_continuous(breaks = seq(0, 1, by=0.25),labels=dropLeading0)
+            
+p2.2.2 <- temp |>
+            filter(names == "Food") |> 
+            mutate(adj_r2 = ifelse(adj_r2 < 0, 0, adj_r2)) |>  # for plotting
+            ggplot(aes(y = adj_r2 , x = names)) +
+              scale_y_continuous(breaks = seq(0, 1, by=0.25),limits = c(0,1), labels=dropLeading0) +
+              stat_dots(slab_color = "black", fill = "grey", point_size = 5, linewidth = 1) +
+              theme_void() 
+
+p2.3.1 <- temp |>
+            filter(names == "Mammals") |> 
+            ggplot(aes(x = RMSE , y = adj_r2)) +
+              geom_point(size = 3, shape = 21, fill = "grey") +
+              geom_smooth(method='lm', color = clrs[2], fill = clrs[2], linewidth = 1.5) +
+              geom_text(aes(x, y, label=r), data=r_df |> filter(names == "Mammals"),
+                        vjust=1, size = 5,parse = T) +
+              theme_nice() + labs(x = "RMSE" , y = "Adjusted R²", title = "Mammals") +
+              coord_cartesian(ylim=c(0,1)) +
+              scale_y_continuous(breaks = seq(0, 1, by=0.25),labels=dropLeading0)
+            
+
+p2.3.2 <- temp |>
+            filter(names == "Mammals") |> 
+            ggplot(aes(y = adj_r2 , x = names)) +
+              scale_y_continuous(breaks = seq(0, 1, by=0.25),limits = c(0,1), labels=dropLeading0) +
+              stat_dots(slab_color = "black", fill = "grey", point_size = 5, linewidth = 1) +
+              theme_void() 
+
+
+
+
+
+p2.1.1 + plot_spacer() + p2.1.2 + p2.2.1 + plot_spacer() + p2.2.2 + p2.3.1 + plot_spacer() + p2.3.2 + plot_layout(widths = rep(c(1, -0.1, 0.3),3))
+
+
+ggsave("../Figures/rel_RMSE_adjR2.pdf", width = 40 , height = 12 , unit = "cm",
+       bg="white",dpi=300,device = cairo_pdf)
+
+```
+
+
+|> 

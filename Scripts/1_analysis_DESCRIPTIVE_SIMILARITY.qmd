@@ -41,6 +41,7 @@ library(tm)
 library(ggwordcloud)
 library(wordcloud)
 library(viridis)
+library(performance)
 
 
 
@@ -88,7 +89,7 @@ dfs <- tibble(names   = c("Food", "Countries", "Mammals"),
 ```
 
 
-# Descriptive Statistics                      
+# Descriptive Statistics                                 
 
 ```{r}
 #| code-summary: "Compute descriptive statistics of similarity ratings"
@@ -115,7 +116,7 @@ sim_summary |>
   kable(digits = 2)
 ```
 
-# Pairwise Similarity Matrices    
+# Pairwise Similarity Matrices                           
 
 ```{r}
 #| code-summary: "Make Figure 3 (Pairwise Similarities)"
@@ -386,7 +387,7 @@ dfs$tbl[[3]]
 ```
 
 
-# Descriptive: Features                          
+# Descriptive: Features                                  
 
 @fig-wc gives an overview of the features people used to make their similarity judgments. Raw responses where preprocessed (lower case, remove punctuation and white space), lemmatized (i.e., "culture"/"cultural" -> "culture"). Only feature which were reported at least 3 times are plotted.
 
@@ -477,3 +478,130 @@ ggsave("../Figures/feature_wc.pdf", width = 40 , height = 15 , unit = "cm",
 
 ```
 
+
+# Reliability                                            
+
+
+```{r}
+#| code-summary: "Define function"
+
+split_half_reliability <- function(data, n_splits = 1000, method = "pearson", seed = NULL) {
+
+  # set seed (if wanted)
+  if (!is.null(seed)) set.seed(seed)
+
+  # init results vector
+  rel <- numeric(n_splits)
+  
+  # get IDs
+  IDs <- data$ID |> unique()
+  N   <- length(IDs) 
+  
+  for (i in seq_len(n_splits)) {
+    
+    # random split
+    idx   <- sample(N)
+    id_s1 <- idx[1:floor(N/2)]
+    id_s2 <- idx[(floor(N/2) + 1):N]
+    
+    # Extract split-wise similarities
+    d_s1 <- data |> 
+      select(ID,ID_stim_1,ID_stim_2,norm_dist) |>    
+      filter(ID %in% IDs[id_s1]) |> # <--- 
+      group_by(ID_stim_1,ID_stim_2) |>  
+      summarize(avg_dist = mean(norm_dist,na.rm=T),.groups="drop") |>   
+      arrange(ID_stim_1,ID_stim_2) |>   
+      pivot_wider(names_from = ID_stim_1,values_from = avg_dist) %>% 
+      .[,-1] |>  
+      as.matrix() |> 
+      as.vector() |> 
+      na.omit()
+      
+    d_s2 <- data |> 
+      select(ID,ID_stim_1,ID_stim_2,norm_dist) |>    
+      filter(ID %in% IDs[id_s2]) |>  # <--- 
+      group_by(ID_stim_1,ID_stim_2) |>  
+      summarize(avg_dist = mean(norm_dist,na.rm=T),.groups="drop") |>   
+      arrange(ID_stim_1,ID_stim_2) |>   
+      pivot_wider(names_from = ID_stim_1,values_from = avg_dist) %>% 
+      .[,-1] |>  
+      as.matrix() |> 
+      as.vector() |> 
+      na.omit()
+  
+      
+    
+    # split-half correlation
+    r <- cor(d_s1, d_s2, method = method, use = "pairwise.complete.obs")
+    
+    # Spearman–Brown correction
+    rel[i] <- (2 * r) / (1 + r)
+  }
+  
+  list(
+    mean = mean(rel, na.rm = TRUE),
+    sd   = sd(rel, na.rm = TRUE),
+    rel  = rel
+  )
+}
+```
+
+```{r}
+#| code-summary: "Compute split-half correlation"
+dfs  <- dfs |> mutate(sh_rel = purrr::map(dataset,split_half_reliability))
+rels <- dfs$sh_rel
+
+# Food:      0.9398272 (.001759423)
+# Countries: 0.8721381 (.00336812)
+# Mammal:    0.9680866 (.0009893157)
+```
+
+# Individual Differences in Similarity Judgments
+
+```{r}
+#| code-summary: "Compute ICCs"
+#| label: tbl-icc
+#| tbl-cap: "ICCs"
+
+icc_food      <- icc(lme4::lmer(sim ~ 1 + (1 | ID) + (1 | pair_ID), data = dfs$dataset[[1]]), by_group = T)
+icc_countries <- icc(lme4::lmer(sim ~ 1 + (1 | ID) + (1 | pair_ID), data = dfs$dataset[[2]]), by_group = T)
+icc_mammals   <- icc(lme4::lmer(sim ~ 1 + (1 | ID) + (1 | pair_ID), data = dfs$dataset[[3]]), by_group = T)
+
+
+bind_rows(icc_food,icc_countries,icc_mammals) |>
+  add_column("domain"=rep(dfs$names,each=2)) |> 
+  pivot_wider(names_from = "domain", values_from = "ICC") |> 
+  kbl(align = "c",digits = 2) |> 
+  kable_paper(c("hover")) 
+
+```
+
+
+```{r}
+#| code-summary: "Compute ICCs"
+#| label: tbl-icc
+#| tbl-cap: "ICCs"
+
+
+dfs |> 
+    mutate(result = map2(dataset, names, function(dataset, names){
+    
+    dataset |> 
+      select(ID, pair_ID, sim) |> 
+      group_by(pair_ID) |> 
+      mutate(avg_sim = mean(sim,na.rm=TRUE)) |> 
+      group_by(ID) |> 
+      summarize(r = cor(avg_sim,sim, use = "pairwise.complete.obs")) |> 
+      ungroup() |> 
+      summarize(M   = mean(r),
+                sd  = sd(r),
+                min = min(r),
+                max = max(r))
+      
+  })) |>
+  select(names, result) |>
+  unnest(result) |> 
+  kbl(align = "c",digits = 2) |> 
+  kable_paper(c("hover")) 
+
+```

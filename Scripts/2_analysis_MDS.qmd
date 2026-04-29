@@ -122,7 +122,7 @@ write_csv2(dfs$dist_mat[[3]] |> as.data.frame(),file="../Results/dist_mat_mammal
 #            verbose  = TRUE) -> mds_loo_cv_COUNTRIES
 
 
-# save(mds_loo_cv_FOOD,file="../Results/mds_loo_cv_countries.Rdata")
+# save(mds_loo_cv_COUNTRIES,file="../Results/mds_loo_cv_countries.Rdata")
 
 
 # loo_CV_MDS(dfs$dist_mat[[3]],
@@ -132,7 +132,7 @@ write_csv2(dfs$dist_mat[[3]] |> as.data.frame(),file="../Results/dist_mat_mammal
 #            verbose  = TRUE) -> mds_loo_cv_MAMMALS
 
 
-# save(mds_loo_cv_FOOD,file="../Results/mds_loo_cv_mammals.Rdata")
+# save(mds_loo_cv_MAMMALS,file="../Results/mds_loo_cv_mammals.Rdata")
 
 
 mds_loo_cv_FOOD      <- get(load("../Results/mds_loo_cv_food.Rdata"))
@@ -165,10 +165,6 @@ mds_res_tbl <- function(results) {
     column_spec(1, width="6em")
 }
 
-
-
-  
-
 # Apply to all datasets in dfs
 dfs <- dfs |> mutate(mds_res = purrr::map(mds_loo_cv, mds_res_tbl))
 
@@ -184,23 +180,23 @@ dfs$mds_res[[3]]
 #| code-summary: "Run MDS"
 # Run MDS
 
-# MDS_FOOD      <- dfs$dist_mat[[1]] %>%
-#                     MDShelper::fill_mat(diag_val = 0) %>%
-#                     smacof::mds(.,ndim=14, "ordinal",  principal = TRUE)
+smacof_MDS_FOOD  <- dfs$dist_mat[[1]] %>%
+                    MDShelper::fill_mat(diag_val = 0) %>%
+                    smacof::mds(.,ndim=14, "ordinal",  principal = TRUE)
 
-# write_csv2(MDS_FOOD$conf %>% as.data.frame(), file="../Results/MDS_config_food.csv")
+# write_csv2(smacof_MDS_FOOD$conf %>% as.data.frame(), file="../Results/MDS_config_food.csv")
 
-# MDS_COUNTRIES <- dfs$dist_mat[[2]] %>%
-#                     MDShelper::fill_mat(diag_val = 0) %>%
-#                     smacof::mds(.,ndim=10, "ordinal",  principal = TRUE)
+smacof_MDS_COUNTRIES <- dfs$dist_mat[[2]] %>%
+                    MDShelper::fill_mat(diag_val = 0) %>%
+                    smacof::mds(.,ndim=10, "ordinal",  principal = TRUE)
 
-# write_csv2(MDS_COUNTRIES$conf %>% as.data.frame(), file="../Results/MDS_config_countries.csv")
+# write_csv2(smacof_MDS_COUNTRIES$conf %>% as.data.frame(), file="../Results/MDS_config_countries.csv")
 
-# MDS_MAMMALS   <- dfs$dist_mat[[3]] %>%
-#                     MDShelper::fill_mat(diag_val = 0) %>%
-#                     smacof::mds(.,ndim=10, "ordinal",  principal = TRUE)
+smacof_MDS_MAMMALS  <- dfs$dist_mat[[3]] %>%
+                    MDShelper::fill_mat(diag_val = 0) %>%
+                    smacof::mds(.,ndim=10, "ordinal",  principal = TRUE)
 
-# write_csv2(MDS_MAMMALS$conf %>% as.data.frame(), file="../Results/MDS_config_mammals.csv")
+# write_csv2(smacof_MDS_MAMMALS$conf %>% as.data.frame(), file="../Results/MDS_config_mammals.csv")
 
 
 # Load
@@ -212,7 +208,6 @@ MDS_MAMMALS   <- read_csv2("../Results/MDS_config_mammals.csv")
 
 # Put in dfs tibble
 dfs$mds_repr <- list(MDS_FOOD,MDS_COUNTRIES,MDS_MAMMALS)
-
 
 ```
 
@@ -244,6 +239,24 @@ dfs$mds_repr <- list(MDS_FOOD,MDS_COUNTRIES,MDS_MAMMALS)
 #            file="../Results/MDS_config_mammals_D20.csv")
 
 ```
+
+## Permutation test
+
+
+```{r permTest}
+#| code-summary: "Run permutation test"
+
+set.seed(222)
+permtest_FOOD      <- permtest(smacof_MDS_FOOD,      nrep = 1000, verbose = FALSE)
+permtest_COUNTRIES <- permtest(smacof_MDS_COUNTRIES, nrep = 1000, verbose = FALSE)
+permtest_MAMMALS   <- permtest(smacof_MDS_MAMMALS,   nrep = 1000, verbose = FALSE)
+
+cat("FOOD p:",      permtest_FOOD$pval, "\n",
+    "COUNTRIES p:", permtest_COUNTRIES$pval, "\n",
+    "MAMMALS p:",   permtest_MAMMALS$pval, "\n")
+```
+
+
 
 
 # Figure: Scatterplot of observed vs. predicted distances 
@@ -292,7 +305,7 @@ ggsave("../Figures/oberserved_predicted_dists.pdf", width = 40 , height = 15 , u
        bg="white",dpi=300,device = cairo_pdf)
 ```
 
-# Figure: Plot of first four dimensions                  
+# Figure: Plot of first four dimensions                   
 
 @fig-mdsdim shows the combinations of the four MDS dimensions (**plotted with `check_overlap = TRUE`**).
 
@@ -390,3 +403,51 @@ ggsave("../Figures/example_dimensions.png", width = 32 , height = 20 , unit = "c
        bg="white",dpi=300)
 ```
 
+
+# Table: Explained Variance
+
+```{r}
+#| code-summary: "Compute approximate R²"
+#| label: tbl-mdsR2
+#| tbl-cap: "Approximate R² of MDS-Dimensions"
+
+
+approx_R2 <- function(MDS_coords,true_dist_vec){
+  
+  n_dim          <- ncol(MDS_coords) 
+  
+  full_dist_food <- dist(MDS_coords)
+  full_r2_food   <- cor(true_dist_vec, as.vector(full_dist_food))^2
+
+  dim_contrib <- sapply(1:n_dim, function(i) {
+    
+    conf_reduced <- MDS_coords[, -i]
+    d_reduced    <- dist(conf_reduced)
+    r2_reduced   <- cor(true_dist_vec, as.vector(d_reduced))^2
+    
+    full_r2_food - r2_reduced
+    
+  })
+
+  return(dim_contrib)
+  
+}
+
+
+approx_R2_food      <- approx_R2(MDS_FOOD,     as.vector(dfs$dist_mat[[1]]) |> na.omit())
+approx_R2_countries <- approx_R2(MDS_COUNTRIES,as.vector(dfs$dist_mat[[2]]) |> na.omit())
+approx_R2_mammals   <- approx_R2(MDS_MAMMALS,  as.vector(dfs$dist_mat[[3]]) |> na.omit())
+
+
+
+
+tibble("# Dim"      = 1:14,
+        "Food"      = papaja::printnum(approx_R2_food,gt1=FALSE),
+        "Countries" = c(papaja::printnum(approx_R2_countries,gt1=FALSE),rep("",4)),
+        "Mammals"   = c(papaja::printnum(approx_R2_mammals,gt1=FALSE),rep("",4))) |> 
+  # kable(format="latex")
+  kbl(align = "c") |> 
+    kable_paper(c("hover"))
+
+
+```
