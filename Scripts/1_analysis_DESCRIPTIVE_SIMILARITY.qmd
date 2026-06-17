@@ -132,8 +132,8 @@ order_food <- dfs$sim_mat[[1]] |>
                 bind_rows(data.frame(ID_stim_1 = 1, 
                                      ID_stim_2 = 80,
                                      norm_sim  = 0.09444444,
-                                     stim_1    = "Traubenzucker",
-                                     stim_2    = "Traubenzucker",
+                                     stim_1    = "Dextrose",
+                                     stim_2    = "Dextrose",
                                      category_1 = "Sweets and snacks", 
                                      category_2 = "Sweets and snacks")) |> # To make Traubenzucker appear in the data
                 arrange(category_1,category_2,stim_1,stim_2) |> 
@@ -257,8 +257,8 @@ order_mammals <- dfs$sim_mat[[3]] |>
                 bind_rows(data.frame(ID_stim_1 = 1, 
                                      ID_stim_2 = 80,
                                      norm_sim  = 99999,
-                                     stim_1    = "Asiatischer Elefant",
-                                     stim_2    = "Asiatischer Elefant",
+                                     stim_1    = "Asiatic elephant",
+                                     stim_2    = "Asiatic elephant",
                                      category_1 = "Proboscidea", 
                                      category_2 = "Proboscidea")) |>
                 arrange(category_1,category_2,stim_1,stim_2) |> 
