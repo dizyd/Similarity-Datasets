@@ -213,6 +213,21 @@ dfs$mds_repr <- list(MDS_FOOD,MDS_COUNTRIES,MDS_MAMMALS)
 
 
 ```{r}
+#| code-summary: "Determine stress-values "
+#| label: tbl-stress
+#| tbl-cap: "Stress-1 values for the selected MDS solutions"
+
+tibble(domain = c("Food","Countries","Mammals"),
+       stress = c(smacof_MDS_FOOD$stress,
+                  smacof_MDS_COUNTRIES$stress,
+                  smacof_MDS_MAMMALS$stress)) |> 
+  kbl(digits=3,align="c") |> 
+    kable_paper(c("hover"))
+```
+
+
+
+```{r}
 #| code-summary: "Run MDS with D=10"
 
 # n_dim <- 20
