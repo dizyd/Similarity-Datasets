@@ -1,4 +1,4 @@
-# Food, Mammals, & Countries: <br> <br> Stimuli, their Pairwise Similarities and MDS-Dimension Values for Modeling Judgment, Categorization, and Memory in three Real-World Domains
+# Food, Mammals, & Countries: Stimuli, their Pairwise Similarities and MDS-Dimension Values for Modeling Judgment, Categorization, and Memory in three Real-World Domains
 
 <br>
 
